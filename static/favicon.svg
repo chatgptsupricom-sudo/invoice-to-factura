@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- PDF doc (left) -->
+  <rect x="1" y="3" width="13" height="17" rx="2" fill="#e53e3e"/>
+  <text x="7.5" y="14.5" font-family="Arial" font-size="5.5" font-weight="bold" fill="white" text-anchor="middle">PDF</text>
+
+  <!-- Arrow -->
+  <path d="M15.5 11.5 L16.5 11.5 L16.5 10 L19 12 L16.5 14 L16.5 12.5 L15.5 12.5 Z" fill="#2d3748"/>
+
+  <!-- Word doc (right) -->
+  <rect x="19" y="3" width="12" height="17" rx="2" fill="#276749"/>
+  <!-- Dollar sign -->
+  <text x="25" y="15" font-family="Arial" font-size="10" font-weight="bold" fill="white" text-anchor="middle">$</text>
+
+  <!-- Bolivar bar bottom -->
+  <rect x="1" y="23" width="30" height="6" rx="2" fill="#2b6cb0"/>
+  <text x="16" y="27.5" font-family="Arial" font-size="4.5" font-weight="bold" fill="white" text-anchor="middle">Bs. FISCAL</text>
+</svg>
