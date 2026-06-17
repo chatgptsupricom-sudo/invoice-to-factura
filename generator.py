@@ -113,16 +113,18 @@ def _remove_borders(table):
 
 # ── Paragraph helpers ─────────────────────────────────────────────────────────
 
-def _zero_para(para):
-    """Set spacing and line height to zero on an existing paragraph."""
+def _zero_para(para, line_spacing_pt=None):
+    """Set spacing to zero on an existing paragraph."""
     para.paragraph_format.space_before = Pt(0)
     para.paragraph_format.space_after  = Pt(0)
-    para.paragraph_format.line_spacing = Pt(7)
+    if line_spacing_pt:
+        para.paragraph_format.line_spacing = Pt(line_spacing_pt)
 
 
 def _cp(cell, text, bold=False, size=6, align=WD_ALIGN_PARAGRAPH.LEFT):
     para = cell.add_paragraph()
-    _zero_para(para)
+    para.paragraph_format.space_before = Pt(0)
+    para.paragraph_format.space_after  = Pt(0)
     para.alignment = align
     run = para.add_run(text)
     run.font.size = Pt(size)
@@ -132,7 +134,7 @@ def _cp(cell, text, bold=False, size=6, align=WD_ALIGN_PARAGRAPH.LEFT):
 
 def _cp_tab(cell, label, value, bold=False, size=6):
     para = cell.add_paragraph()
-    _zero_para(para)
+    _zero_para(para, line_spacing_pt=7)
     pPr = para._p.get_or_add_pPr()
     tabs_el = OxmlElement("w:tabs")
     tab = OxmlElement("w:tab")
@@ -241,7 +243,7 @@ def _totals_box(doc, subtotal, iva_rate, tasa_bcv):
         for cell in row.cells:
             _set_cell_width(cell, COL_W)
             _tight_cell(cell)
-            _zero_para(cell.paragraphs[0])
+            _zero_para(cell.paragraphs[0], line_spacing_pt=7)
 
     # Apply vertical divider (right border of left cell) for rows 0-7
     # and no other internal borders on any cell
