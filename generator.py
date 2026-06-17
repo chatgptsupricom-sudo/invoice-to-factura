@@ -314,7 +314,7 @@ def generate_docx(invoice_data: dict, iva_rate: float = 0.16, tasa_bcv: float = 
     subtotal_general = round(sum(i["total"] for i in items), 2)
 
     # Definimos el límite estricto de ítems permitidos por hoja
-    ITEMS_PER_PAGE = 30
+    ITEMS_PER_PAGE = 25
 
     # Procesamos el portafolio de ítems en bloques de 20
     for start_idx in range(0, len(items), ITEMS_PER_PAGE):
