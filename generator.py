@@ -303,41 +303,65 @@ def generate_docx(invoice_data: dict, iva_rate: float = 0.16, tasa_bcv: float = 
 
     doc = Document()
 
+    # Configuración homogénea de márgenes para cada folio
     for section in doc.sections:
-        section.top_margin    = Cm(3.5)  # Espacio superior (~5 líneas vacías para membrete)
-        section.bottom_margin = Cm(2.5)  # NUEVO: Espacio inferior controlado para evitar desbordes
+        section.top_margin    = Cm(3.5)  # Espacio superior para membrete corporativo
+        section.bottom_margin = Cm(2.5)  # Espacio inferior de seguridad
         section.left_margin   = Cm(2)
         section.right_margin  = Cm(1.5)
 
-    _header_table(
-        doc,
-        invoice_no   = hdr.get("invoice_no", ""),
-        invoice_date = hdr.get("invoice_date", ""),
-        due_date     = hdr.get("due_date", ""),
-        terms        = hdr.get("terms", ""),
-    )
-    _space(doc, 4)
-    _divider(doc)
-    _space(doc, 1)
+    # Calculamos el subtotal global por adelantado para tenerlo disponible
+    subtotal_general = round(sum(i["total"] for i in items), 2)
 
-    _row_para(doc, ["CÓDIGO", "DESCRIPCIÓN", "CANT.", "PRECIO", "TOTAL"],
-              bold=True, font_size=6)
-    _divider(doc)
+    # Definimos el límite estricto de ítems permitidos por hoja
+    ITEMS_PER_PAGE = 20
 
-    for item in items:
-        _row_para(doc, [
-            item["codigo"],
-            item["descripcion"],
-            _fmt_qty(item["cantidad"]),
-            _m(item["precio"]),
-            _m(item["total"]),
-        ], font_size=5.5)
+    # Procesamos el portafolio de ítems en bloques de 20
+    for start_idx in range(0, len(items), ITEMS_PER_PAGE):
+        chunk = items[start_idx : start_idx + ITEMS_PER_PAGE]
 
-    _divider(doc)
-    _space(doc, 4)
+        # 1. Replicamos el encabezado del cliente y número de control en cada hoja
+        _header_table(
+            doc,
+            invoice_no   = hdr.get("invoice_no", ""),
+            invoice_date = hdr.get("invoice_date", ""),
+            due_date     = hdr.get("due_date", ""),
+            terms        = hdr.get("terms", ""),
+        )
+        _space(doc, 4)
+        _divider(doc)
+        _space(doc, 1)
 
-    subtotal = round(sum(i["total"] for i in items), 2)
-    _totals_box(doc, subtotal, iva_rate, tasa_bcv)
+        # 2. Insertamos la fila de títulos para la tabla de productos
+        _row_para(doc, ["CÓDIGO", "DESCRIPCIÓN", "CANT.", "PRECIO", "TOTAL"],
+                  bold=True, font_size=6)
+        _divider(doc)
+
+        # 3. Listamos exclusivamente los productos que corresponden a esta página
+        for item in chunk:
+            _row_para(doc, [
+                item["codigo"],
+                item["descripcion"],
+                _fmt_qty(item["cantidad"]),
+                _m(item["precio"]),
+                _m(item["total"]),
+            ], font_size=5.5)
+
+        _divider(doc)
+        _space(doc, 4)
+
+        # 4. Acoplamos el cuadro fiscal de totales estructurado al pie de la hoja
+        # ENFOQUE SOLICITADO: Muestra el gran total de toda la factura en cada folio
+        _totals_box(doc, subtotal_general, iva_rate, tasa_bcv)
+
+        # AJUSTE ALTERNATIVO (Opcional): Si prefieres rigurosidad contable por hoja,
+        # comenta la línea de arriba y desmarca las siguientes dos líneas:
+        # subtotal_pagina = round(sum(i["total"] for i in chunk), 2)
+        # _totals_box(doc, subtotal_pagina, iva_rate, tasa_bcv)
+
+        # 5. Si quedan más productos en cola, forzamos un salto de página limpio
+        if start_idx + ITEMS_PER_PAGE < len(items):
+            doc.add_page_break()
 
     buf = BytesIO()
     doc.save(buf)
