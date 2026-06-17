@@ -113,20 +113,16 @@ def _remove_borders(table):
 
 # ── Paragraph helpers ─────────────────────────────────────────────────────────
 
-def _cell_para(cell):
-    """Return the cell's sole paragraph, removing any extras."""
-    for extra in list(cell.paragraphs[1:]):
-        extra._p.getparent().remove(extra._p)
-    para = cell.paragraphs[0]
-    para.clear()
+def _zero_para(para):
+    """Set spacing and line height to zero on an existing paragraph."""
     para.paragraph_format.space_before = Pt(0)
     para.paragraph_format.space_after  = Pt(0)
     para.paragraph_format.line_spacing = Pt(7)
-    return para
 
 
 def _cp(cell, text, bold=False, size=6, align=WD_ALIGN_PARAGRAPH.LEFT):
-    para = _cell_para(cell)
+    para = cell.add_paragraph()
+    _zero_para(para)
     para.alignment = align
     run = para.add_run(text)
     run.font.size = Pt(size)
@@ -135,9 +131,8 @@ def _cp(cell, text, bold=False, size=6, align=WD_ALIGN_PARAGRAPH.LEFT):
 
 
 def _cp_tab(cell, label, value, bold=False, size=6):
-    para = _cell_para(cell)
-    para.paragraph_format.space_before = Pt(0)
-    para.paragraph_format.space_after  = Pt(0)
+    para = cell.add_paragraph()
+    _zero_para(para)
     pPr = para._p.get_or_add_pPr()
     tabs_el = OxmlElement("w:tabs")
     tab = OxmlElement("w:tab")
@@ -241,11 +236,12 @@ def _totals_box(doc, subtotal, iva_rate, tasa_bcv):
                        top=BORDER, left=BORDER, bottom=BORDER, right=BORDER,
                        insideH=NONE_B, insideV=NONE_B)
 
-    # Set widths and tight margins for all cells
+    # Set widths, tight margins, and zero-space default paragraph for all cells
     for row in table.rows:
         for cell in row.cells:
             _set_cell_width(cell, COL_W)
             _tight_cell(cell)
+            _zero_para(cell.paragraphs[0])
 
     # Apply vertical divider (right border of left cell) for rows 0-7
     # and no other internal borders on any cell
