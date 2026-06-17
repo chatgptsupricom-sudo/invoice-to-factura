@@ -87,7 +87,7 @@ def _tight_cell(cell):
     for old in tcPr.findall(qn("w:tcMar")):
         tcPr.remove(old)
     mar = OxmlElement("w:tcMar")
-    for side, twips in (("top", "20"), ("bottom", "20"), ("left", "60"), ("right", "60")):
+    for side, twips in (("top", "0"), ("bottom", "0"), ("left", "60"), ("right", "60")):
         s = OxmlElement(f"w:{side}")
         s.set(qn("w:w"), twips)
         s.set(qn("w:type"), "dxa")
@@ -113,10 +113,20 @@ def _remove_borders(table):
 
 # ── Paragraph helpers ─────────────────────────────────────────────────────────
 
-def _cp(cell, text, bold=False, size=6, align=WD_ALIGN_PARAGRAPH.LEFT):
-    para = cell.add_paragraph()
+def _cell_para(cell):
+    """Return the cell's sole paragraph, removing any extras."""
+    for extra in list(cell.paragraphs[1:]):
+        extra._p.getparent().remove(extra._p)
+    para = cell.paragraphs[0]
+    para.clear()
     para.paragraph_format.space_before = Pt(0)
     para.paragraph_format.space_after  = Pt(0)
+    para.paragraph_format.line_spacing = Pt(7)
+    return para
+
+
+def _cp(cell, text, bold=False, size=6, align=WD_ALIGN_PARAGRAPH.LEFT):
+    para = _cell_para(cell)
     para.alignment = align
     run = para.add_run(text)
     run.font.size = Pt(size)
@@ -125,7 +135,7 @@ def _cp(cell, text, bold=False, size=6, align=WD_ALIGN_PARAGRAPH.LEFT):
 
 
 def _cp_tab(cell, label, value, bold=False, size=6):
-    para = cell.add_paragraph()
+    para = _cell_para(cell)
     para.paragraph_format.space_before = Pt(0)
     para.paragraph_format.space_after  = Pt(0)
     pPr = para._p.get_or_add_pPr()
@@ -249,8 +259,6 @@ def _totals_box(doc, subtotal, iva_rate, tasa_bcv):
     _set_cell_borders(table.rows[8].cells[1], top=BORDER)
 
     # ── Row 0: column titles ──
-    table.cell(0, 0).text = ""
-    table.cell(0, 1).text = ""
     _cp(table.cell(0, 0), "Monto en Dólares  (U$S.)", bold=True, size=6,
         align=WD_ALIGN_PARAGRAPH.CENTER)
     _cp(table.cell(0, 1), "Monto en Bolívares  (Bs.)", bold=True, size=6,
@@ -267,8 +275,6 @@ def _totals_box(doc, subtotal, iva_rate, tasa_bcv):
 
     for i, (lu, vu, lb, vb) in enumerate(data):
         r = table.rows[i + 1]
-        r.cells[0].text = ""
-        r.cells[1].text = ""
         is_total = (i == 4)
         _cp_tab(r.cells[0], lu, vu, bold=is_total, size=6)
         _cp_tab(r.cells[1], lb, vb, bold=is_total, size=6)
@@ -276,7 +282,6 @@ def _totals_box(doc, subtotal, iva_rate, tasa_bcv):
     # ── Rows 6-8: full-width merged ──
     def _merge(row_idx):
         merged = table.cell(row_idx, 0).merge(table.cell(row_idx, 1))
-        merged.text = ""
         return merged
 
     igtf_cell   = _merge(6)
