@@ -304,8 +304,8 @@ def generate_docx(invoice_data: dict, iva_rate: float = 0.16, tasa_bcv: float = 
     doc = Document()
 
     for section in doc.sections:
-        section.top_margin    = Cm(1.5)
-        section.bottom_margin = Cm(1.5)
+        section.top_margin    = Cm(3.5)  # Espacio superior (~5 líneas vacías para membrete)
+        section.bottom_margin = Cm(2.5)  # NUEVO: Espacio inferior controlado para evitar desbordes
         section.left_margin   = Cm(2)
         section.right_margin  = Cm(1.5)
 
