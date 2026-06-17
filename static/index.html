@@ -181,7 +181,9 @@
       <div class="options-row">
         <label for="iva-input">% IVA:</label>
         <input type="number" id="iva-input" value="16" min="0" max="100" step="0.01" />
-        <small style="color:#718096;">Tasa de IVA aplicable (default: 16%)</small>
+        <label for="bcv-input" style="margin-left:1rem;">Tasa BCV (Bs./$):</label>
+        <input type="number" id="bcv-input" value="" min="0" step="0.0001" placeholder="ej: 587.4100" style="width:130px;" />
+        <small style="color:#718096;">Para calcular montos en Bolívares</small>
       </div>
 
       <button class="btn-primary" id="btn-preview" disabled>
@@ -355,9 +357,11 @@
       btnDownload.textContent = '⏳ Generando Word...';
 
       const ivaRate = parseFloat(document.getElementById('iva-input').value) / 100;
+      const tasaBcv = parseFloat(document.getElementById('bcv-input').value) || 1.0;
       const fd = new FormData();
       fd.append('pdf', selectedFile);
       fd.append('iva_rate', ivaRate.toString());
+      fd.append('tasa_bcv', tasaBcv.toString());
 
       try {
         const res = await fetch('/convert', { method: 'POST', body: fd });
