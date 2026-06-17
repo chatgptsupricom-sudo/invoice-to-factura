@@ -1,7 +1,6 @@
 from io import BytesIO
-from copy import deepcopy
 from docx import Document
-from docx.shared import Pt, Twips
+from docx.shared import Pt, Cm, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
@@ -9,136 +8,126 @@ from docx.oxml import OxmlElement
 
 TEMPLATE_PATH = "template.docx"
 
-# Column widths in twips (from template measurement, total ~11287)
-COL_WIDTHS = [1800, 5800, 900, 1300, 1487]  # Código, Descripción, Cantidad, Precio, Total
+# Tab stop positions in cm from left margin
+# Código(0) | Descripción(3.5) | Cantidad(13) | Precio(15) | Total(18)
+TAB_CODIGO = 0
+TAB_DESC   = 3.5
+TAB_CANT   = 13.2
+TAB_PRECIO = 15.5
+TAB_TOTAL  = 18.5
 
 
-def _fix_table_layout(table):
-    """Force fixed table layout so Word respects column widths."""
-    tbl = table._tbl
-    tblPr = tbl.find(qn("w:tblPr"))
-    if tblPr is None:
-        tblPr = OxmlElement("w:tblPr")
-        tbl.insert(0, tblPr)
-    tblLayout = tblPr.find(qn("w:tblLayout"))
-    if tblLayout is None:
-        tblLayout = OxmlElement("w:tblLayout")
-        tblPr.append(tblLayout)
-    tblLayout.set(qn("w:type"), "fixed")
-
-    # Also set explicit table width
-    tblW = tblPr.find(qn("w:tblW"))
-    if tblW is None:
-        tblW = OxmlElement("w:tblW")
-        tblPr.append(tblW)
-    tblW.set(qn("w:w"), str(sum(COL_WIDTHS)))
-    tblW.set(qn("w:type"), "dxa")
+def _cm(val):
+    return Cm(val)
 
 
-def _set_col_width(cell, width_twips):
-    tc = cell._tc
-    tcPr = tc.get_or_add_tcPr()
-    tcW = tcPr.find(qn("w:tcW"))
-    if tcW is None:
-        tcW = OxmlElement("w:tcW")
-        tcPr.append(tcW)
-    tcW.set(qn("w:w"), str(width_twips))
-    tcW.set(qn("w:type"), "dxa")
+def _add_tab_stops(para, stops):
+    """Add tab stops to a paragraph. stops = list of (position_cm, alignment)."""
+    pPr = para._p.get_or_add_pPr()
+    tabs_el = OxmlElement("w:tabs")
+    for pos_cm, align in stops:
+        tab = OxmlElement("w:tab")
+        tab.set(qn("w:val"), align)
+        tab.set(qn("w:pos"), str(int(Cm(pos_cm).pt * 20)))
+        tabs_el.append(tab)
+    pPr.append(tabs_el)
 
 
-def _set_cell(cell, text, bold=False, align=WD_ALIGN_PARAGRAPH.LEFT, font_size=9):
-    cell.text = ""
-    para = cell.paragraphs[0]
-    para.alignment = align
-    run = para.add_run(str(text))
+def _row_para(doc, cols, bold=False, font_size=9, header=False):
+    """Add a paragraph with tab-separated columns."""
+    para = doc.add_paragraph()
+    para.paragraph_format.space_before = Pt(0)
+    para.paragraph_format.space_after = Pt(1)
+
+    stops = [
+        (TAB_DESC,   "left"),
+        (TAB_CANT,   "right"),
+        (TAB_PRECIO, "right"),
+        (TAB_TOTAL,  "right"),
+    ]
+    _add_tab_stops(para, stops)
+
+    # Build: col0 \t col1 \t col2 \t col3 \t col4
+    text = f"{cols[0]}\t{cols[1]}\t{cols[2]}\t{cols[3]}\t{cols[4]}"
+    run = para.add_run(text)
     run.font.size = Pt(font_size)
-    if bold:
-        run.bold = True
+    run.bold = bold
+    if header:
+        run.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+
+    if header:
+        # Gray background via paragraph shading
+        pPr = para._p.get_or_add_pPr()
+        shd = OxmlElement("w:shd")
+        shd.set(qn("w:val"), "clear")
+        shd.set(qn("w:color"), "auto")
+        shd.set(qn("w:fill"), "2D3748")
+        pPr.append(shd)
+
+    return para
 
 
-def _add_row_with_widths(table, values, bold=False, aligns=None, font_size=9):
-    """Add a row with fixed column widths."""
-    row = table.add_row()
-    if aligns is None:
-        aligns = [WD_ALIGN_PARAGRAPH.LEFT] * len(values)
-    for i, (cell, val, width) in enumerate(zip(row.cells, values, COL_WIDTHS)):
-        _set_col_width(cell, width)
-        _set_cell(cell, val, bold=bold, align=aligns[i], font_size=font_size)
-    return row
+def _divider(doc):
+    para = doc.add_paragraph()
+    para.paragraph_format.space_before = Pt(0)
+    para.paragraph_format.space_after = Pt(0)
+    run = para.add_run("─" * 110)
+    run.font.size = Pt(7)
+    run.font.color.rgb = RGBColor(0xCC, 0xCC, 0xCC)
 
 
 def generate_docx(invoice_data: dict, iva_rate: float = 0.16) -> bytes:
     header = invoice_data["header"]
     items = invoice_data["items"]
 
-    doc = Document(TEMPLATE_PATH)
+    doc = Document()
 
-    # --- Update header paragraphs ---
-    for para in doc.paragraphs:
-        t = para.text
-        if "Número de Factura:" in t:
-            _replace_para(para, f"Número de Factura: {header.get('invoice_no', '')}")
-        elif "Fecha de Emisión:" in t:
-            _replace_para(para, f"Fecha de Emisión: {header.get('invoice_date', '')}")
-        elif "Termino de Pago:" in t:
-            _replace_para(para, f"Termino de Pago: {header.get('terms', '')}")
+    # --- Page margins ---
+    for section in doc.sections:
+        section.top_margin    = Cm(1.5)
+        section.bottom_margin = Cm(1.5)
+        section.left_margin   = Cm(2)
+        section.right_margin  = Cm(1.5)
 
-    # --- Work with items table (first table) ---
-    table = doc.tables[0]
-    _fix_table_layout(table)
+    # --- Company header ---
+    _heading(doc, "SUPRICOM CCS 21, C.A.", size=14, bold=True)
+    _heading(doc, "CALLE LOS LABORATORIOS EDIF. OFINCA PISO PB LOCAL 2-A, LOS RUISES, CARACAS, MIRANDA", size=9)
+    _heading(doc, "Distrito Capital — Venezuela — J501193738", size=9)
+    _space(doc)
 
-    # Fix header row widths
-    header_row = table.rows[0]
-    header_texts = ["Código", "Descripción", "Cantidad", "Precio", "Total"]
-    for i, (cell, width) in enumerate(zip(header_row.cells, COL_WIDTHS)):
-        _set_col_width(cell, width)
+    # Invoice details block
+    _detail(doc, "N° Factura",     header.get("invoice_no", ""))
+    _detail(doc, "Fecha",          header.get("invoice_date", ""))
+    _detail(doc, "Vencimiento",    header.get("due_date", ""))
+    _detail(doc, "Términos",       header.get("terms", ""))
+    _space(doc)
 
-    # Remove all rows after header
-    rows_to_remove = list(table.rows)[1:]
-    for row in rows_to_remove:
-        table._tbl.remove(row._tr)
+    # --- Column header row ---
+    _row_para(doc,
+              ["CÓDIGO", "DESCRIPCIÓN", "CANT", "PRECIO", "TOTAL"],
+              bold=True, font_size=9, header=True)
 
-    # Right-align for numeric columns
-    R = WD_ALIGN_PARAGRAPH.RIGHT
-    L = WD_ALIGN_PARAGRAPH.LEFT
-
-    # Add item rows
+    # --- Item rows ---
     for item in items:
-        _add_row_with_widths(
-            table,
-            [
-                item["codigo"],
-                item["descripcion"],
-                _fmt_qty(item["cantidad"]),
-                _fmt_money(item["precio"]),
-                _fmt_money(item["total"]),
-            ],
-            aligns=[L, L, R, R, R],
-        )
+        _row_para(doc, [
+            item["codigo"],
+            item["descripcion"],
+            _fmt_qty(item["cantidad"]),
+            _fmt_money(item["precio"]),
+            _fmt_money(item["total"]),
+        ], font_size=8.5)
+
+    _divider(doc)
+    _space(doc)
 
     # --- Totals ---
-    subtotal = sum(i["total"] for i in items)
-    iva_amount = round(subtotal * iva_rate, 2)
+    subtotal     = sum(i["total"] for i in items)
+    iva_amount   = round(subtotal * iva_rate, 2)
     total_general = round(subtotal + iva_amount, 2)
 
-    # Spacer
-    _add_row_with_widths(table, ["", "", "", "", ""])
-
-    # Subtotal
-    _add_row_with_widths(
-        table, ["", "", "", "SUBTOTAL:", _fmt_money(subtotal)],
-        aligns=[L, L, L, R, R], font_size=9,
-    )
-    # IVA
-    _add_row_with_widths(
-        table, ["", "", "", f"IVA ({int(iva_rate*100)}%):", _fmt_money(iva_amount)],
-        aligns=[L, L, L, R, R], font_size=9,
-    )
-    # Total General
-    _add_row_with_widths(
-        table, ["", "", "", "TOTAL GENERAL:", _fmt_money(total_general)],
-        bold=True, aligns=[L, L, L, R, R], font_size=10,
-    )
+    _total_row(doc, "Subtotal:",                   subtotal)
+    _total_row(doc, f"IVA ({int(iva_rate*100)})%:", iva_amount)
+    _total_row(doc, "TOTAL GENERAL:",               total_general, bold=True, size=11)
 
     buf = BytesIO()
     doc.save(buf)
@@ -146,13 +135,46 @@ def generate_docx(invoice_data: dict, iva_rate: float = 0.16) -> bytes:
     return buf.read()
 
 
-def _replace_para(para, new_text):
-    for run in para.runs:
-        run.text = ""
-    if para.runs:
-        para.runs[0].text = new_text
-    else:
-        para.add_run(new_text)
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+def _heading(doc, text, size=10, bold=False):
+    p = doc.add_paragraph()
+    p.paragraph_format.space_before = Pt(0)
+    p.paragraph_format.space_after  = Pt(2)
+    r = p.add_run(text)
+    r.font.size = Pt(size)
+    r.bold = bold
+
+
+def _detail(doc, label, value):
+    p = doc.add_paragraph()
+    p.paragraph_format.space_before = Pt(0)
+    p.paragraph_format.space_after  = Pt(1)
+    r1 = p.add_run(f"{label}: ")
+    r1.font.size = Pt(9)
+    r1.bold = True
+    r2 = p.add_run(value)
+    r2.font.size = Pt(9)
+
+
+def _space(doc):
+    p = doc.add_paragraph()
+    p.paragraph_format.space_before = Pt(0)
+    p.paragraph_format.space_after  = Pt(4)
+
+
+def _total_row(doc, label, amount, bold=False, size=10):
+    p = doc.add_paragraph()
+    p.paragraph_format.space_before = Pt(0)
+    p.paragraph_format.space_after  = Pt(2)
+    p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+
+    stops = [(TAB_TOTAL, "right")]
+    _add_tab_stops(p, stops)
+
+    r = p.add_run(f"{label}    {_fmt_money(amount)}")
+    r.font.size = Pt(size)
+    r.bold = bold
 
 
 def _fmt_money(val) -> str:
@@ -160,6 +182,6 @@ def _fmt_money(val) -> str:
 
 
 def _fmt_qty(val) -> str:
-    if val == int(val):
-        return str(int(val))
+    if float(val) == int(float(val)):
+        return str(int(float(val)))
     return str(val)
