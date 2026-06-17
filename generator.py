@@ -13,6 +13,28 @@ TEMPLATE_PATH = "template.docx"
 COL_WIDTHS = [1800, 5800, 900, 1300, 1487]  # Código, Descripción, Cantidad, Precio, Total
 
 
+def _fix_table_layout(table):
+    """Force fixed table layout so Word respects column widths."""
+    tbl = table._tbl
+    tblPr = tbl.find(qn("w:tblPr"))
+    if tblPr is None:
+        tblPr = OxmlElement("w:tblPr")
+        tbl.insert(0, tblPr)
+    tblLayout = tblPr.find(qn("w:tblLayout"))
+    if tblLayout is None:
+        tblLayout = OxmlElement("w:tblLayout")
+        tblPr.append(tblLayout)
+    tblLayout.set(qn("w:type"), "fixed")
+
+    # Also set explicit table width
+    tblW = tblPr.find(qn("w:tblW"))
+    if tblW is None:
+        tblW = OxmlElement("w:tblW")
+        tblPr.append(tblW)
+    tblW.set(qn("w:w"), str(sum(COL_WIDTHS)))
+    tblW.set(qn("w:type"), "dxa")
+
+
 def _set_col_width(cell, width_twips):
     tc = cell._tc
     tcPr = tc.get_or_add_tcPr()
@@ -63,6 +85,7 @@ def generate_docx(invoice_data: dict, iva_rate: float = 0.16) -> bytes:
 
     # --- Work with items table (first table) ---
     table = doc.tables[0]
+    _fix_table_layout(table)
 
     # Fix header row widths
     header_row = table.rows[0]
