@@ -17,8 +17,8 @@ TAB_TOTAL  = 18.5
 FOOTER_LEGAL = (
     "FACTURA SEGUN CONVENIO CAMBIARIO N°1 GOE N°6.405 DE FECHA 07/09/2018. "
     "FACTURA CALCULADA A LA TASA BCV ACTUAL Bs. POR US$ DOLAR "
-    "{tasa}PARA EFECTOS DEL IVA DE CONFORMIDAD CON LO ESTABLECIDO EN EL ARTICULO 116 DEL BCV. "
-    "PAGARA EN BOLIVARES A LA TASA BCV DEL DIA."
+    "{tasa}PARA EFECTOS DEL IVA DE CONFORMIDAD CON LO ESTABLECIDO "
+    "EN EL ARTICULO 116 DEL BCV. PAGARA EN BOLIVARES A LA TASA BCV DEL DIA."
 )
 
 IGTF_LEGAL = (
@@ -26,6 +26,8 @@ IGTF_LEGAL = (
     "se cobrará el 3% de IGTF según Gaceta Oficial 42.339 de fecha 2/02/2022"
 )
 
+
+# ── XML helpers ──────────────────────────────────────────────────────────────
 
 def _add_tab_stops(para, stops):
     pPr = para._p.get_or_add_pPr()
@@ -52,7 +54,29 @@ def _remove_borders(table):
     tblPr.append(tblBorders)
 
 
-def _set_borders(table):
+def _set_outer_border(table):
+    """Single border only on outside of table, no inside lines."""
+    tbl = table._tbl
+    tblPr = tbl.find(qn("w:tblPr"))
+    if tblPr is None:
+        tblPr = OxmlElement("w:tblPr")
+        tbl.insert(0, tblPr)
+    tblBorders = OxmlElement("w:tblBorders")
+    for side in ("top", "left", "bottom", "right"):
+        el = OxmlElement(f"w:{side}")
+        el.set(qn("w:val"), "single")
+        el.set(qn("w:sz"), "4")
+        el.set(qn("w:space"), "0")
+        el.set(qn("w:color"), "000000")
+        tblBorders.append(el)
+    for side in ("insideH", "insideV"):
+        el = OxmlElement(f"w:{side}")
+        el.set(qn("w:val"), "none")
+        tblBorders.append(el)
+    tblPr.append(tblBorders)
+
+
+def _set_full_borders(table):
     tbl = table._tbl
     tblPr = tbl.find(qn("w:tblPr"))
     if tblPr is None:
@@ -78,16 +102,49 @@ def _set_cell_width(cell, twips):
     tcPr.append(tcW)
 
 
-def _cell_para(cell, text, bold=False, size=8, align=WD_ALIGN_PARAGRAPH.LEFT):
-    p = cell.add_paragraph()
-    p.paragraph_format.space_before = Pt(0)
-    p.paragraph_format.space_after  = Pt(0)
-    p.alignment = align
-    r = p.add_run(text)
-    r.font.size = Pt(size)
-    r.bold = bold
-    return p
+def _no_cell_spacing(cell):
+    tc = cell._tc
+    tcPr = tc.get_or_add_tcPr()
+    mar = OxmlElement("w:tcMar")
+    for side in ("top", "bottom", "left", "right"):
+        s = OxmlElement(f"w:{side}")
+        s.set(qn("w:w"), "40")
+        s.set(qn("w:type"), "dxa")
+        mar.append(s)
+    tcPr.append(mar)
 
+
+def _p(cell, text, bold=False, size=6, align=WD_ALIGN_PARAGRAPH.LEFT):
+    """Add compact paragraph to a cell."""
+    para = cell.add_paragraph()
+    para.paragraph_format.space_before = Pt(0)
+    para.paragraph_format.space_after  = Pt(0)
+    para.alignment = align
+    run = para.add_run(text)
+    run.font.size = Pt(size)
+    run.bold = bold
+    return para
+
+
+def _p_tab(cell, label, value, bold=False, size=6):
+    """Paragraph with label left + value right via tab in cell."""
+    para = cell.add_paragraph()
+    para.paragraph_format.space_before = Pt(0)
+    para.paragraph_format.space_after  = Pt(0)
+    pPr = para._p.get_or_add_pPr()
+    tabs_el = OxmlElement("w:tabs")
+    tab = OxmlElement("w:tab")
+    tab.set(qn("w:val"), "right")
+    tab.set(qn("w:pos"), str(int(Cm(8.6).pt * 20)))
+    tabs_el.append(tab)
+    pPr.append(tabs_el)
+    run = para.add_run(f"{label}\t{value}")
+    run.font.size = Pt(size)
+    run.bold = bold
+    return para
+
+
+# ── Header ───────────────────────────────────────────────────────────────────
 
 def _header_table(doc, invoice_no, invoice_date, due_date, terms):
     table = doc.add_table(rows=1, cols=2)
@@ -102,37 +159,34 @@ def _header_table(doc, invoice_no, invoice_date, due_date, terms):
 
     left  = table.cell(0, 0)
     right = table.cell(0, 1)
-
     _set_cell_width(left,  9000)
     _set_cell_width(right, 5400)
 
     left.text = ""
-    _cell_para(left, "Cliente: SUPRICOM CCS 21, C.A.", bold=True, size=9)
-    _cell_para(left, "CALLE LOS LABORATORIOS EDIF. OFINCA PISO PB LOCAL 2-A, LOS RUISES, CARACAS, MIRANDA", size=8)
-    _cell_para(left, "Distrito Capital DTC Distrito Capital", size=8)
-    _cell_para(left, "Venezuela — J501193738", size=8)
+    _p(left, "Cliente: SUPRICOM CCS 21, C.A.", bold=True, size=9)
+    _p(left, "CALLE LOS LABORATORIOS EDIF. OFINCA PISO PB LOCAL 2-A, LOS RUISES, CARACAS, MIRANDA", size=8)
+    _p(left, "Distrito Capital DTC Distrito Capital", size=8)
+    _p(left, "Venezuela — J501193738", size=8)
 
     right.text = ""
-    _cell_para(right, f"Número de Factura: {invoice_no}", bold=True, size=9, align=WD_ALIGN_PARAGRAPH.RIGHT)
-    _cell_para(right, f"Fecha de Emisión: {invoice_date}", size=8, align=WD_ALIGN_PARAGRAPH.RIGHT)
-    _cell_para(right, f"Termino de Pago: {terms}", size=8, align=WD_ALIGN_PARAGRAPH.RIGHT)
+    _p(right, f"Número de Factura: {invoice_no}", bold=True, size=9, align=WD_ALIGN_PARAGRAPH.RIGHT)
+    _p(right, f"Fecha de Emisión: {invoice_date}", size=8, align=WD_ALIGN_PARAGRAPH.RIGHT)
+    _p(right, f"Termino de Pago: {terms}", size=8, align=WD_ALIGN_PARAGRAPH.RIGHT)
 
+
+# ── Item rows ─────────────────────────────────────────────────────────────────
 
 def _row_para(doc, cols, bold=False, font_size=5.5):
     para = doc.add_paragraph()
     para.paragraph_format.space_before = Pt(0)
     para.paragraph_format.space_after  = Pt(0.5)
-
-    stops = [
+    _add_tab_stops(para, [
         (TAB_DESC,   "left"),
         (TAB_CANT,   "right"),
         (TAB_PRECIO, "right"),
         (TAB_TOTAL,  "right"),
-    ]
-    _add_tab_stops(para, stops)
-
-    text = f"{cols[0]}\t{cols[1]}\t{cols[2]}\t{cols[3]}\t{cols[4]}"
-    run = para.add_run(text)
+    ])
+    run = para.add_run(f"{cols[0]}\t{cols[1]}\t{cols[2]}\t{cols[3]}\t{cols[4]}")
     run.font.size = Pt(font_size)
     run.bold = bold
     return para
@@ -147,84 +201,90 @@ def _divider(doc, size=7):
     run.font.color.rgb = RGBColor(0xAA, 0xAA, 0xAA)
 
 
+# ── Totals box ────────────────────────────────────────────────────────────────
+
 def _totals_box(doc, subtotal, iva_rate, tasa_bcv):
-    """Bordered two-column table with USD and Bs. totals."""
+    """
+    Single bordered box containing:
+    - Row 0: header titles (Dólares | Bolívares)
+    - Rows 1-4: Sub-Total, Base Imponible, IVA, IGTF, Total General
+    - Row 5: IGTF legal text (full width, merged)
+    - Row 6: Tasa vigente (full width, merged)
+    - Row 7: divider line (full width)
+    - Row 8: footer legal (full width)
+    """
+    subtotal   = round(subtotal, 2)
     iva_pct    = int(iva_rate * 100)
     iva_amount = round(subtotal * iva_rate, 2)
     total_usd  = round(subtotal + iva_amount, 2)
 
-    sub_bs     = round(subtotal   * tasa_bcv, 2)
-    iva_bs     = round(iva_amount * tasa_bcv, 2)
-    total_bs   = round(total_usd  * tasa_bcv, 2)
+    sub_bs   = round(subtotal   * tasa_bcv, 2)
+    iva_bs   = round(iva_amount * tasa_bcv, 2)
+    total_bs = round(total_usd  * tasa_bcv, 2)
 
-    table = doc.add_table(rows=5, cols=2)
-    _set_borders(table)
+    today     = date.today().strftime("%-d/%m/%Y")
+    tasa_fmt  = f"{tasa_bcv:,.4f}"
 
-    # Column widths
+    # 9 rows total
+    table = doc.add_table(rows=9, cols=2)
+    _set_full_borders(table)
+
+    COL_W = 7150
     for row in table.rows:
-        _set_cell_width(row.cells[0], 7100)
-        _set_cell_width(row.cells[1], 7200)
+        for cell in row.cells:
+            _set_cell_width(cell, COL_W)
+            _no_cell_spacing(cell)
 
-    # Header row (row 0): column titles
-    h_left  = table.cell(0, 0)
-    h_right = table.cell(0, 1)
-    h_left.text  = ""
-    h_right.text = ""
-    _cell_para(h_left,  "Monto en Dólares  (U$S.)", bold=True, size=6)
-    _cell_para(h_right, "Monto en Bolívares  (Bs.)", bold=True, size=6)
+    # Row 0: column titles
+    table.cell(0, 0).text = ""
+    table.cell(0, 1).text = ""
+    _p(table.cell(0, 0), "Monto en Dólares  (U$S.)", bold=True, size=6,
+       align=WD_ALIGN_PARAGRAPH.CENTER)
+    _p(table.cell(0, 1), "Monto en Bolívares  (Bs.)", bold=True, size=6,
+       align=WD_ALIGN_PARAGRAPH.CENTER)
 
-    rows_data = [
-        # label_usd,                 val_usd,     label_bs,                          val_bs
-        ("Sub-Total:",               subtotal,    "Sub-Total Ref:",                  sub_bs),
-        ("Base Imponible:",          subtotal,    "Base Imponible Ref:",              sub_bs),
-        (f"IVA {iva_pct}% Sobre {_fmt(subtotal - iva_amount / iva_rate * (1 - iva_rate)):.3f}:",
-                                     iva_amount,
-         f"IVA {iva_pct}% Ref Sobre {_fmt(sub_bs / (1 + iva_rate)):.3f}  :",
-                                     iva_bs),
-        ("IGTF 3% Sugerido:",        0.00,        "IGTF 3% Sugerido Ref:",           0.00),
-        ("Total General U$S:",       total_usd,   "Total General Ref Bs.:",          total_bs),
+    # Rows 1-5: data
+    data_rows = [
+        ("Sub-Total:",           _m(subtotal),
+         "Sub-Total Ref:",       _m(sub_bs)),
+        ("Base Imponible:",      _m(subtotal),
+         "Base Imponible Ref:",  _m(sub_bs)),
+        (f"IVA {iva_pct}% Sobre {_m(subtotal)} :",  _m3(iva_amount),
+         f"IVA {iva_pct}% Ref Sobre {_m(sub_bs)}  :", _m3(iva_bs)),
+        ("IGTF 3% Sugerido:",    _m(0),
+         "IGTF 3% Sugerido Ref:", _m(0)),
+        ("Total General U$S:",   _m(total_usd),
+         "Total General Ref Bs.:", _m(total_bs)),
     ]
 
-    for i, (lu, vu, lb, vb) in enumerate(rows_data):
-        r = table.rows[i]
+    for i, (lu, vu, lb, vb) in enumerate(data_rows):
+        r = table.rows[i + 1]
         r.cells[0].text = ""
         r.cells[1].text = ""
         is_total = (i == 4)
-        # Left cell: label + value side by side
-        _biline(r.cells[0], lu, _fmt(vu), bold=is_total, size=6)
-        _biline(r.cells[1], lb, _fmt(vb), bold=is_total, size=6)
+        _p_tab(r.cells[0], lu, vu, bold=is_total, size=6)
+        _p_tab(r.cells[1], lb, vb, bold=is_total, size=6)
 
-    return table
+    # Rows 6-8: full-width merged cells (legal text + footer)
+    def _merge_row(row_idx):
+        a = table.cell(row_idx, 0)
+        b = table.cell(row_idx, 1)
+        merged = a.merge(b)
+        merged.text = ""
+        return merged
 
+    igtf_cell = _merge_row(6)
+    _p(igtf_cell, IGTF_LEGAL, size=5.5)
 
-def _biline(cell, label, value, bold=False, size=6):
-    """One paragraph: label left-aligned, value right-aligned via tab."""
-    p = cell.add_paragraph()
-    p.paragraph_format.space_before = Pt(0)
-    p.paragraph_format.space_after  = Pt(0)
+    tasa_cell = _merge_row(7)
+    _p(tasa_cell, f"Tasa Vigente al {today} según el BCV: {tasa_fmt}", size=5.5)
 
-    # Tab stop at far right of cell (~8.5 cm)
-    pPr = p._p.get_or_add_pPr()
-    tabs_el = OxmlElement("w:tabs")
-    tab = OxmlElement("w:tab")
-    tab.set(qn("w:val"), "right")
-    tab.set(qn("w:pos"), str(int(Cm(8.8).pt * 20)))
-    tabs_el.append(tab)
-    pPr.append(tabs_el)
-
-    r = p.add_run(f"{label}\t{value}")
-    r.font.size = Pt(size)
-    r.bold = bold
+    footer_cell = _merge_row(8)
+    _p(footer_cell, "─" * 120, size=5)
+    _p(footer_cell, FOOTER_LEGAL.format(tasa=tasa_fmt), size=5.5)
 
 
-def _small_para(doc, text, size=5.5, bold=False):
-    p = doc.add_paragraph()
-    p.paragraph_format.space_before = Pt(0)
-    p.paragraph_format.space_after  = Pt(1)
-    r = p.add_run(text)
-    r.font.size = Pt(size)
-    r.bold = bold
-
+# ── Main ─────────────────────────────────────────────────────────────────────
 
 def generate_docx(invoice_data: dict, iva_rate: float = 0.16, tasa_bcv: float = 1.0) -> bytes:
     hdr   = invoice_data["header"]
@@ -238,7 +298,6 @@ def generate_docx(invoice_data: dict, iva_rate: float = 0.16, tasa_bcv: float = 
         section.left_margin   = Cm(2)
         section.right_margin  = Cm(1.5)
 
-    # Header
     _header_table(
         doc,
         invoice_no   = hdr.get("invoice_no", ""),
@@ -250,39 +309,24 @@ def generate_docx(invoice_data: dict, iva_rate: float = 0.16, tasa_bcv: float = 
     _divider(doc)
     _space(doc, 1)
 
-    # Column headers
     _row_para(doc, ["CÓDIGO", "DESCRIPCIÓN", "CANT.", "PRECIO", "TOTAL"],
               bold=True, font_size=6)
     _divider(doc)
 
-    # Items (same order as PDF)
     for item in items:
         _row_para(doc, [
             item["codigo"],
             item["descripcion"],
             _fmt_qty(item["cantidad"]),
-            _fmt_money(item["precio"]),
-            _fmt_money(item["total"]),
+            _m(item["precio"]),
+            _m(item["total"]),
         ], font_size=5.5)
 
     _divider(doc)
     _space(doc, 4)
 
-    # Totals box
-    subtotal = sum(i["total"] for i in items)
+    subtotal = round(sum(i["total"] for i in items), 2)
     _totals_box(doc, subtotal, iva_rate, tasa_bcv)
-
-    _space(doc, 2)
-
-    # Legal texts
-    _small_para(doc, IGTF_LEGAL, size=5.5)
-    today = date.today().strftime("%-d/%m/%Y")
-    tasa_fmt = f"{tasa_bcv:,.4f}".replace(",", "X").replace(".", ",").replace("X", ".")
-    _small_para(doc, f"Tasa Vigente al {today} según el BCV: {tasa_fmt}", size=5.5)
-    _space(doc, 2)
-    _divider(doc)
-    _space(doc, 1)
-    _small_para(doc, FOOTER_LEGAL.format(tasa=tasa_fmt), size=5.5)
 
     buf = BytesIO()
     doc.save(buf)
@@ -290,7 +334,7 @@ def generate_docx(invoice_data: dict, iva_rate: float = 0.16, tasa_bcv: float = 
     return buf.read()
 
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
+# ── Formatting helpers ────────────────────────────────────────────────────────
 
 def _space(doc, after_pt=4):
     p = doc.add_paragraph()
@@ -298,12 +342,14 @@ def _space(doc, after_pt=4):
     p.paragraph_format.space_after  = Pt(after_pt)
 
 
-def _fmt(val) -> float:
-    return val
+def _m(val) -> str:
+    """Format as money with 2 decimals."""
+    return f"{round(float(val), 2):,.2f}"
 
 
-def _fmt_money(val) -> str:
-    return f"{val:,.2f}"
+def _m3(val) -> str:
+    """Format as money with 3 decimals (for IVA amounts)."""
+    return f"{round(float(val), 3):,.3f}"
 
 
 def _fmt_qty(val) -> str:
