@@ -345,7 +345,7 @@ def generate_docx(invoice_data: dict, iva_rate: float = 0.16, tasa_bcv: float = 
                 _fmt_qty(item["cantidad"]),
                 _m(item["precio"]),
                 _m(item["total"]),
-            ], font_size=5.5)
+            ], font_size=6.5)
 
         _divider(doc)
         _space(doc, 4)
