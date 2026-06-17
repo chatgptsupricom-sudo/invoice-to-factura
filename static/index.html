@@ -223,9 +223,18 @@
 
       <div class="totals-box">
         <table class="totals-table">
-          <tr><td>Subtotal</td><td id="t-subtotal">—</td></tr>
-          <tr><td id="t-iva-label">IVA (16%)</td><td id="t-iva">—</td></tr>
-          <tr class="total-row"><td>TOTAL GENERAL</td><td id="t-total">—</td></tr>
+          <thead>
+            <tr>
+              <th></th>
+              <th>Monto U$S</th>
+              <th>Monto Bs.</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Subtotal</td><td id="t-subtotal">—</td><td id="t-subtotal-bs">—</td></tr>
+            <tr><td id="t-iva-label">IVA (16%)</td><td id="t-iva">—</td><td id="t-iva-bs">—</td></tr>
+            <tr class="total-row"><td>TOTAL GENERAL</td><td id="t-total">—</td><td id="t-total-bs">—</td></tr>
+          </tbody>
         </table>
       </div>
 
@@ -323,14 +332,20 @@
       document.getElementById('inv-count').textContent = data.items.length;
 
       const ivaRate = parseFloat(document.getElementById('iva-input').value) / 100;
+      const tasaBcv = parseFloat(document.getElementById('bcv-input').value) || 0;
       const subtotal = data.items.reduce((s, i) => s + i.total, 0);
       const iva = subtotal * ivaRate;
       const total = subtotal + iva;
 
+      const bsFmt = (n) => tasaBcv ? 'Bs. ' + fmt(n * tasaBcv) : '—';
+
       document.getElementById('t-subtotal').textContent = '$ ' + fmt(subtotal);
+      document.getElementById('t-subtotal-bs').textContent = bsFmt(subtotal);
       document.getElementById('t-iva-label').textContent = `IVA (${Math.round(ivaRate * 100)}%)`;
       document.getElementById('t-iva').textContent = '$ ' + fmt(iva);
+      document.getElementById('t-iva-bs').textContent = bsFmt(iva);
       document.getElementById('t-total').textContent = '$ ' + fmt(total);
+      document.getElementById('t-total-bs').textContent = bsFmt(total);
 
       itemsTbody.innerHTML = '';
       data.items.forEach((item, idx) => {
@@ -357,7 +372,13 @@
       btnDownload.textContent = '⏳ Generando Word...';
 
       const ivaRate = parseFloat(document.getElementById('iva-input').value) / 100;
-      const tasaBcv = parseFloat(document.getElementById('bcv-input').value) || 1.0;
+      const tasaBcv = parseFloat(document.getElementById('bcv-input').value);
+      if (!tasaBcv || tasaBcv <= 0) {
+        showStatus('error', '⚠️ Ingresa la Tasa BCV antes de generar el Word.');
+        btnDownload.disabled = false;
+        btnDownload.textContent = '⬇️ Descargar Formato Fiscal Word (.docx)';
+        return;
+      }
       const fd = new FormData();
       fd.append('pdf', selectedFile);
       fd.append('iva_rate', ivaRate.toString());
