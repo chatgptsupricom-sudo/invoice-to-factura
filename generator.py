@@ -173,7 +173,7 @@ def _header_table(doc, invoice_no, invoice_date, due_date, terms):
 
     right.text = ""
     _cp(right, f"Número de Factura: {invoice_no}", bold=True, size=9, align=WD_ALIGN_PARAGRAPH.RIGHT)
-    _cp(right, f"Fecha de Emisión: {invoice_date}", size=8, align=WD_ALIGN_PARAGRAPH.RIGHT)
+    _cp(right, f"Fecha de Emisión: {date.today().strftime('%-d/%m/%Y')}", size=8, align=WD_ALIGN_PARAGRAPH.RIGHT)
     _cp(right, f"Termino de Pago: {terms}", size=8, align=WD_ALIGN_PARAGRAPH.RIGHT)
 
 
