@@ -179,7 +179,7 @@ def _header_table(doc, invoice_no, invoice_date, due_date, terms):
 
 # ── Item rows ─────────────────────────────────────────────────────────────────
 
-def _row_para(doc, cols, bold=False, font_size=5.5):
+def _row_para(doc, cols, bold=False, font_size=6.5):
     para = doc.add_paragraph()
     para.paragraph_format.space_before = Pt(0)
     para.paragraph_format.space_after  = Pt(0.5)
