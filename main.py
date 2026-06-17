@@ -20,6 +20,7 @@ async def index():
 async def convert(
     pdf: UploadFile = File(...),
     iva_rate: float = Form(0.16),
+    tasa_bcv: float = Form(1.0),
 ):
     if not pdf.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="El archivo debe ser un PDF.")
@@ -35,7 +36,7 @@ async def convert(
         raise HTTPException(status_code=422, detail="No se encontraron ítems en el PDF.")
 
     try:
-        docx_bytes = generate_docx(invoice_data, iva_rate=iva_rate)
+        docx_bytes = generate_docx(invoice_data, iva_rate=iva_rate, tasa_bcv=tasa_bcv)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al generar el Word: {e}")
 
