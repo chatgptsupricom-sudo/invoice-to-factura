@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Invoice → Factura Fiscal</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #f0f4f8;
+      color: #1a202c;
+      min-height: 100vh;
+    }
+    header {
+      background: #1a365d;
+      color: white;
+      padding: 1.5rem 2rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    header h1 { font-size: 1.4rem; font-weight: 700; }
+    header p { font-size: 0.85rem; opacity: 0.8; margin-top: 0.2rem; }
+    .logo { font-size: 2rem; }
+    main { max-width: 1000px; margin: 2rem auto; padding: 0 1rem; }
+    .card {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      padding: 2rem;
+      margin-bottom: 1.5rem;
+    }
+    .card h2 { font-size: 1.1rem; margin-bottom: 1.2rem; color: #2d3748; }
+
+    /* Upload area */
+    .drop-zone {
+      border: 2.5px dashed #a0aec0;
+      border-radius: 10px;
+      padding: 2.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: #f7fafc;
+    }
+    .drop-zone:hover, .drop-zone.drag-over {
+      border-color: #3182ce;
+      background: #ebf8ff;
+    }
+    .drop-zone .icon { font-size: 3rem; margin-bottom: 0.8rem; }
+    .drop-zone p { color: #718096; font-size: 0.95rem; }
+    .drop-zone strong { color: #2b6cb0; }
+    #file-input { display: none; }
+    .file-selected { color: #2d3748; font-weight: 600; font-size: 1rem; }
+
+    /* Options */
+    .options-row {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-top: 1.2rem;
+      flex-wrap: wrap;
+    }
+    .options-row label { font-size: 0.9rem; color: #4a5568; font-weight: 500; }
+    .options-row input[type=number] {
+      width: 80px;
+      padding: 0.4rem 0.6rem;
+      border: 1.5px solid #cbd5e0;
+      border-radius: 6px;
+      font-size: 0.9rem;
+    }
+    .btn-primary {
+      background: #2b6cb0;
+      color: white;
+      border: none;
+      padding: 0.75rem 2rem;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+      margin-top: 1.2rem;
+      width: 100%;
+    }
+    .btn-primary:hover { background: #2c5282; }
+    .btn-primary:disabled { background: #a0aec0; cursor: not-allowed; }
+
+    /* Status */
+    .status {
+      display: none;
+      align-items: center;
+      gap: 0.7rem;
+      margin-top: 1rem;
+      padding: 0.8rem 1rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+    }
+    .status.loading { background: #ebf8ff; color: #2b6cb0; display: flex; }
+    .status.error { background: #fff5f5; color: #c53030; display: flex; }
+    .status.success { background: #f0fff4; color: #276749; display: flex; }
+    .spinner {
+      width: 18px; height: 18px;
+      border: 2.5px solid #bee3f8;
+      border-top-color: #2b6cb0;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Preview table */
+    #preview-section { display: none; }
+    .summary-bar {
+      display: flex;
+      gap: 2rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+    .summary-item { font-size: 0.85rem; }
+    .summary-item span { font-weight: 700; color: #2b6cb0; }
+    .table-wrap { overflow-x: auto; max-height: 420px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    thead th {
+      background: #2d3748;
+      color: white;
+      padding: 0.6rem 0.8rem;
+      text-align: left;
+      position: sticky;
+      top: 0;
+    }
+    tbody tr:nth-child(even) { background: #f7fafc; }
+    tbody td { padding: 0.5rem 0.8rem; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+    /* Totals */
+    .totals-box {
+      margin-top: 1rem;
+      display: flex;
+      justify-content: flex-end;
+    }
+    .totals-table { border-collapse: collapse; min-width: 280px; }
+    .totals-table td { padding: 0.35rem 0.8rem; font-size: 0.9rem; }
+    .totals-table td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+    .totals-table tr.total-row td { font-weight: 700; font-size: 1rem; border-top: 2px solid #2d3748; padding-top: 0.5rem; }
+
+    .btn-download {
+      background: #276749;
+      color: white;
+      border: none;
+      padding: 0.75rem 2rem;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+      margin-top: 1.2rem;
+      width: 100%;
+    }
+    .btn-download:hover { background: #22543d; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">📄</div>
+    <div>
+      <h1>Invoice → Factura Fiscal</h1>
+      <p>Sube el PDF del invoice y obtén el formato fiscal Word automáticamente</p>
+    </div>
+  </header>
+
+  <main>
+    <div class="card">
+      <h2>1. Sube el Invoice PDF</h2>
+
+      <div class="drop-zone" id="drop-zone">
+        <div class="icon">📂</div>
+        <p id="drop-label"><strong>Haz clic</strong> o arrastra el PDF aquí</p>
+        <input type="file" id="file-input" accept=".pdf" />
+      </div>
+
+      <div class="options-row">
+        <label for="iva-input">% IVA:</label>
+        <input type="number" id="iva-input" value="16" min="0" max="100" step="0.01" />
+        <small style="color:#718096;">Tasa de IVA aplicable (default: 16%)</small>
+      </div>
+
+      <button class="btn-primary" id="btn-preview" disabled>
+        🔍 Extraer y previsualizar ítems
+      </button>
+
+      <div class="status" id="status">
+        <div class="spinner" id="spinner"></div>
+        <span id="status-text"></span>
+      </div>
+    </div>
+
+    <div class="card" id="preview-section">
+      <h2>2. Ítems extraídos del PDF</h2>
+      <div class="summary-bar">
+        <div class="summary-item">Factura N°: <span id="inv-no">—</span></div>
+        <div class="summary-item">Fecha: <span id="inv-date">—</span></div>
+        <div class="summary-item">Términos: <span id="inv-terms">—</span></div>
+        <div class="summary-item">Ítems: <span id="inv-count">—</span></div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Código</th>
+              <th>Descripción</th>
+              <th class="num">Cantidad</th>
+              <th class="num">Precio</th>
+              <th class="num">Total</th>
+            </tr>
+          </thead>
+          <tbody id="items-tbody"></tbody>
+        </table>
+      </div>
+
+      <div class="totals-box">
+        <table class="totals-table">
+          <tr><td>Subtotal</td><td id="t-subtotal">—</td></tr>
+          <tr><td id="t-iva-label">IVA (16%)</td><td id="t-iva">—</td></tr>
+          <tr class="total-row"><td>TOTAL GENERAL</td><td id="t-total">—</td></tr>
+        </table>
+      </div>
+
+      <button class="btn-download" id="btn-download">
+        ⬇️ Descargar Formato Fiscal Word (.docx)
+      </button>
+    </div>
+  </main>
+
+  <script>
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-input');
+    const dropLabel = document.getElementById('drop-label');
+    const btnPreview = document.getElementById('btn-preview');
+    const btnDownload = document.getElementById('btn-download');
+    const status = document.getElementById('status');
+    const statusText = document.getElementById('status-text');
+    const spinner = document.getElementById('spinner');
+    const previewSection = document.getElementById('preview-section');
+    const itemsTbody = document.getElementById('items-tbody');
+
+    let selectedFile = null;
+    let currentData = null;
+
+    dropZone.addEventListener('click', () => fileInput.click());
+
+    dropZone.addEventListener('dragover', e => {
+      e.preventDefault();
+      dropZone.classList.add('drag-over');
+    });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropZone.classList.remove('drag-over');
+      const f = e.dataTransfer.files[0];
+      if (f && f.name.endsWith('.pdf')) setFile(f);
+    });
+
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files[0]) setFile(fileInput.files[0]);
+    });
+
+    function setFile(f) {
+      selectedFile = f;
+      dropLabel.innerHTML = `<span class="file-selected">📄 ${f.name}</span>`;
+      btnPreview.disabled = false;
+      hideStatus();
+      previewSection.style.display = 'none';
+    }
+
+    function showStatus(type, msg) {
+      status.className = 'status ' + type;
+      statusText.textContent = msg;
+      spinner.style.display = type === 'loading' ? 'block' : 'none';
+    }
+    function hideStatus() { status.className = 'status'; }
+
+    function fmt(n) {
+      return Number(n).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    btnPreview.addEventListener('click', async () => {
+      if (!selectedFile) return;
+      btnPreview.disabled = true;
+      showStatus('loading', 'Extrayendo ítems del PDF...');
+
+      const fd = new FormData();
+      fd.append('pdf', selectedFile);
+
+      try {
+        const res = await fetch('/preview', { method: 'POST', body: fd });
+        if (!res.ok) {
+          const err = await res.json();
+          showStatus('error', err.detail || 'Error al procesar el PDF.');
+          btnPreview.disabled = false;
+          return;
+        }
+        currentData = await res.json();
+        renderPreview(currentData);
+        showStatus('success', `✅ ${currentData.items.length} ítems extraídos correctamente.`);
+        previewSection.style.display = 'block';
+        previewSection.scrollIntoView({ behavior: 'smooth' });
+      } catch (e) {
+        showStatus('error', 'Error de conexión: ' + e.message);
+      } finally {
+        btnPreview.disabled = false;
+      }
+    });
+
+    function renderPreview(data) {
+      const h = data.header;
+      document.getElementById('inv-no').textContent = h.invoice_no || '—';
+      document.getElementById('inv-date').textContent = h.invoice_date || '—';
+      document.getElementById('inv-terms').textContent = h.terms || '—';
+      document.getElementById('inv-count').textContent = data.items.length;
+
+      const ivaRate = parseFloat(document.getElementById('iva-input').value) / 100;
+      const subtotal = data.items.reduce((s, i) => s + i.total, 0);
+      const iva = subtotal * ivaRate;
+      const total = subtotal + iva;
+
+      document.getElementById('t-subtotal').textContent = '$ ' + fmt(subtotal);
+      document.getElementById('t-iva-label').textContent = `IVA (${Math.round(ivaRate * 100)}%)`;
+      document.getElementById('t-iva').textContent = '$ ' + fmt(iva);
+      document.getElementById('t-total').textContent = '$ ' + fmt(total);
+
+      itemsTbody.innerHTML = '';
+      data.items.forEach((item, idx) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${idx + 1}</td>
+          <td>${esc(item.codigo)}</td>
+          <td>${esc(item.descripcion)}</td>
+          <td class="num">${fmt(item.cantidad)}</td>
+          <td class="num">$ ${fmt(item.precio)}</td>
+          <td class="num">$ ${fmt(item.total)}</td>
+        `;
+        itemsTbody.appendChild(tr);
+      });
+    }
+
+    function esc(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    btnDownload.addEventListener('click', async () => {
+      if (!selectedFile) return;
+      btnDownload.disabled = true;
+      btnDownload.textContent = '⏳ Generando Word...';
+
+      const ivaRate = parseFloat(document.getElementById('iva-input').value) / 100;
+      const fd = new FormData();
+      fd.append('pdf', selectedFile);
+      fd.append('iva_rate', ivaRate.toString());
+
+      try {
+        const res = await fetch('/convert', { method: 'POST', body: fd });
+        if (!res.ok) {
+          const err = await res.json();
+          showStatus('error', err.detail || 'Error al generar el Word.');
+          return;
+        }
+        const blob = await res.blob();
+        const cd = res.headers.get('Content-Disposition') || '';
+        const match = cd.match(/filename="(.+?)"/);
+        const filename = match ? match[1] : 'Factura_Fiscal.docx';
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+        showStatus('success', `✅ Descargando ${filename}`);
+      } catch (e) {
+        showStatus('error', 'Error de conexión: ' + e.message);
+      } finally {
+        btnDownload.disabled = false;
+        btnDownload.textContent = '⬇️ Descargar Formato Fiscal Word (.docx)';
+      }
+    });
+  </script>
+</body>
+</html>
