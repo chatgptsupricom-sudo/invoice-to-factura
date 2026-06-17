@@ -1,37 +1,48 @@
 from io import BytesIO
 from copy import deepcopy
 from docx import Document
-from docx.shared import Pt, RGBColor
+from docx.shared import Pt, Twips
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
-import copy
+from docx.oxml import OxmlElement
 
 
 TEMPLATE_PATH = "template.docx"
 
+# Column widths in twips (from template measurement, total ~11287)
+COL_WIDTHS = [1800, 5800, 900, 1300, 1487]  # Código, Descripción, Cantidad, Precio, Total
 
-def _set_cell_text(cell, text, bold=False, font_size=None, align=None):
+
+def _set_col_width(cell, width_twips):
+    tc = cell._tc
+    tcPr = tc.get_or_add_tcPr()
+    tcW = tcPr.find(qn("w:tcW"))
+    if tcW is None:
+        tcW = OxmlElement("w:tcW")
+        tcPr.append(tcW)
+    tcW.set(qn("w:w"), str(width_twips))
+    tcW.set(qn("w:type"), "dxa")
+
+
+def _set_cell(cell, text, bold=False, align=WD_ALIGN_PARAGRAPH.LEFT, font_size=9):
     cell.text = ""
     para = cell.paragraphs[0]
+    para.alignment = align
     run = para.add_run(str(text))
+    run.font.size = Pt(font_size)
     if bold:
         run.bold = True
-    if font_size:
-        run.font.size = Pt(font_size)
-    if align:
-        para.alignment = align
 
 
-def _copy_row_format(source_row, target_row):
-    """Copy XML element properties from source row to target row."""
-    for src_cell, tgt_cell in zip(source_row.cells, target_row.cells):
-        tgt_cell._tc.get_or_add_tcPr()
-        src_tcPr = src_cell._tc.find(qn("w:tcPr"))
-        if src_tcPr is not None:
-            tgt_tcPr = tgt_cell._tc.find(qn("w:tcPr"))
-            if tgt_tcPr is not None:
-                tgt_cell._tc.remove(tgt_tcPr)
-            tgt_cell._tc.insert(0, deepcopy(src_tcPr))
+def _add_row_with_widths(table, values, bold=False, aligns=None, font_size=9):
+    """Add a row with fixed column widths."""
+    row = table.add_row()
+    if aligns is None:
+        aligns = [WD_ALIGN_PARAGRAPH.LEFT] * len(values)
+    for i, (cell, val, width) in enumerate(zip(row.cells, values, COL_WIDTHS)):
+        _set_col_width(cell, width)
+        _set_cell(cell, val, bold=bold, align=aligns[i], font_size=font_size)
+    return row
 
 
 def generate_docx(invoice_data: dict, iva_rate: float = 0.16) -> bytes:
@@ -53,44 +64,59 @@ def generate_docx(invoice_data: dict, iva_rate: float = 0.16) -> bytes:
     # --- Work with items table (first table) ---
     table = doc.tables[0]
 
-    # Keep only header row and one blank row as template, remove rest
-    # Find first data row index (skip header row 0 and blank row 1)
-    template_data_row = table.rows[1]  # blank row used as format template
+    # Fix header row widths
+    header_row = table.rows[0]
+    header_texts = ["Código", "Descripción", "Cantidad", "Precio", "Total"]
+    for i, (cell, width) in enumerate(zip(header_row.cells, COL_WIDTHS)):
+        _set_col_width(cell, width)
 
-    # Remove all rows after row 0 (keep header)
+    # Remove all rows after header
     rows_to_remove = list(table.rows)[1:]
     for row in rows_to_remove:
-        tbl = table._tbl
-        tbl.remove(row._tr)
+        table._tbl.remove(row._tr)
+
+    # Right-align for numeric columns
+    R = WD_ALIGN_PARAGRAPH.RIGHT
+    L = WD_ALIGN_PARAGRAPH.LEFT
 
     # Add item rows
     for item in items:
-        row = table.add_row()
-        _copy_row_format(template_data_row, row)
-        row.cells[0].text = str(item["codigo"])
-        row.cells[1].text = str(item["descripcion"])
-        row.cells[2].text = _fmt_qty(item["cantidad"])
-        row.cells[3].text = _fmt_money(item["precio"])
-        row.cells[4].text = _fmt_money(item["total"])
+        _add_row_with_widths(
+            table,
+            [
+                item["codigo"],
+                item["descripcion"],
+                _fmt_qty(item["cantidad"]),
+                _fmt_money(item["precio"]),
+                _fmt_money(item["total"]),
+            ],
+            aligns=[L, L, R, R, R],
+        )
 
-    # --- Totals section ---
+    # --- Totals ---
     subtotal = sum(i["total"] for i in items)
     iva_amount = round(subtotal * iva_rate, 2)
     total_general = round(subtotal + iva_amount, 2)
 
-    # Add spacer row
-    spacer = table.add_row()
-    for cell in spacer.cells:
-        cell.text = ""
+    # Spacer
+    _add_row_with_widths(table, ["", "", "", "", ""])
 
-    # Subtotal row
-    _add_total_row(table, "SUBTOTAL:", subtotal)
-    # IVA row
-    _add_total_row(table, f"IVA ({int(iva_rate*100)}%):", iva_amount)
-    # Total general row
-    _add_total_row(table, "TOTAL GENERAL:", total_general, bold=True)
+    # Subtotal
+    _add_row_with_widths(
+        table, ["", "", "", "SUBTOTAL:", _fmt_money(subtotal)],
+        aligns=[L, L, L, R, R], font_size=9,
+    )
+    # IVA
+    _add_row_with_widths(
+        table, ["", "", "", f"IVA ({int(iva_rate*100)}%):", _fmt_money(iva_amount)],
+        aligns=[L, L, L, R, R], font_size=9,
+    )
+    # Total General
+    _add_row_with_widths(
+        table, ["", "", "", "TOTAL GENERAL:", _fmt_money(total_general)],
+        bold=True, aligns=[L, L, L, R, R], font_size=10,
+    )
 
-    # Save to buffer
     buf = BytesIO()
     doc.save(buf)
     buf.seek(0)
@@ -114,23 +140,3 @@ def _fmt_qty(val) -> str:
     if val == int(val):
         return str(int(val))
     return str(val)
-
-
-def _add_total_row(table, label: str, amount: float, bold: bool = False):
-    row = table.add_row()
-    # Merge first 4 cells for label
-    row.cells[0].text = ""
-    row.cells[1].text = ""
-    row.cells[2].text = ""
-    row.cells[3].text = label
-    para = row.cells[3].paragraphs[0]
-    para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    if bold:
-        for run in para.runs:
-            run.bold = True
-    row.cells[4].text = _fmt_money(amount)
-    para4 = row.cells[4].paragraphs[0]
-    para4.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    if bold:
-        for run in para4.runs:
-            run.bold = True
