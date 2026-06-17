@@ -64,9 +64,9 @@ def extract_invoice(pdf_bytes: bytes) -> dict:
 
         # Try to match a complete item on this line (possibly with leading number)
         # Strip leading "NN. " if present
-        stripped = re.sub(r"^\d+\.\s+", "", line)
+        stripped = re.sub(r"^\d+\.\s*", "", line)
 
-        m = _ITEM_RE.match(line) or _ITEM_RE.match(stripped)
+        m = _ITEM_RE.match(stripped) or _ITEM_RE.match(line)
         if m:
             # Save any pending partial item first
             if pending:
