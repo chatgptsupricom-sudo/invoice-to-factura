@@ -206,6 +206,11 @@
         <div class="summary-item">Ítems: <span id="inv-count">—</span></div>
       </div>
 
+      <div style="margin:0.75rem 0;">
+        <input id="search-input" type="text" placeholder="🔍  Buscar por código o descripción…"
+          style="width:100%;padding:0.5rem 0.75rem;border:1px solid #cbd5e0;border-radius:6px;font-size:0.9rem;box-sizing:border-box;" />
+      </div>
+
       <div class="table-wrap">
         <table>
           <thead>
@@ -216,6 +221,7 @@
               <th class="num">Cantidad</th>
               <th class="num">Precio</th>
               <th class="num">Total</th>
+              <th style="width:32px;"></th>
             </tr>
           </thead>
           <tbody id="items-tbody"></tbody>
@@ -259,6 +265,9 @@
 
     let selectedFile = null;
     let currentData = null;
+    let activeItems  = [];   // items currently in the list (deletions reflected here)
+
+    document.getElementById('search-input').addEventListener('input', renderItems);
 
     dropZone.addEventListener('click', () => fileInput.click());
 
@@ -314,6 +323,7 @@
           return;
         }
         currentData = await res.json();
+        activeItems  = [...currentData.items];
         renderPreview(currentData);
         showStatus('success', `✅ ${currentData.items.length} ítems extraídos correctamente.`);
         previewSection.style.display = 'block';
@@ -327,29 +337,20 @@
 
     function renderPreview(data) {
       const h = data.header;
-      document.getElementById('inv-no').textContent = h.invoice_no || '—';
-      document.getElementById('inv-date').textContent = h.invoice_date || '—';
+      document.getElementById('inv-no').textContent    = h.invoice_no || '—';
+      document.getElementById('inv-date').textContent  = h.invoice_date || '—';
       document.getElementById('inv-terms').textContent = h.terms || '—';
-      document.getElementById('inv-count').textContent = data.items.length;
+      renderItems();
+      updateTotals();
+    }
 
-      const ivaRate = parseFloat(document.getElementById('iva-input').value) / 100;
-      const tasaBcv = parseFloat(document.getElementById('bcv-input').value) || 0;
-      const subtotal = data.items.reduce((s, i) => s + i.total, 0);
-      const iva = subtotal * ivaRate;
-      const total = subtotal + iva;
-
-      const bsFmt = (n) => tasaBcv ? 'Bs. ' + fmt(n * tasaBcv) : '—';
-
-      document.getElementById('t-subtotal').textContent = '$ ' + fmt(subtotal);
-      document.getElementById('t-subtotal-bs').textContent = bsFmt(subtotal);
-      document.getElementById('t-iva-label').textContent = `IVA (${Math.round(ivaRate * 100)}%)`;
-      document.getElementById('t-iva').textContent = '$ ' + fmt(iva);
-      document.getElementById('t-iva-bs').textContent = bsFmt(iva);
-      document.getElementById('t-total').textContent = '$ ' + fmt(total);
-      document.getElementById('t-total-bs').textContent = bsFmt(total);
-
+    function renderItems() {
+      const q = (document.getElementById('search-input').value || '').toLowerCase();
       itemsTbody.innerHTML = '';
-      data.items.forEach((item, idx) => {
+      let visible = 0;
+      activeItems.forEach((item, idx) => {
+        if (q && !item.codigo.toLowerCase().includes(q) && !item.descripcion.toLowerCase().includes(q)) return;
+        visible++;
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td>${idx + 1}</td>
@@ -358,9 +359,36 @@
           <td class="num">${fmt(item.cantidad)}</td>
           <td class="num">$ ${fmt(item.precio)}</td>
           <td class="num">$ ${fmt(item.total)}</td>
+          <td style="text-align:center;">
+            <button data-idx="${idx}" title="Eliminar ítem"
+              style="background:none;border:none;cursor:pointer;color:#e53e3e;font-size:1rem;line-height:1;padding:0 4px;">✕</button>
+          </td>
         `;
+        tr.querySelector('button').addEventListener('click', (e) => {
+          const i = parseInt(e.currentTarget.dataset.idx);
+          activeItems.splice(i, 1);
+          renderItems();
+          updateTotals();
+        });
         itemsTbody.appendChild(tr);
       });
+      document.getElementById('inv-count').textContent = activeItems.length + (q ? ` (${visible} visibles)` : '');
+    }
+
+    function updateTotals() {
+      const ivaRate = parseFloat(document.getElementById('iva-input').value) / 100;
+      const tasaBcv = parseFloat(document.getElementById('bcv-input').value) || 0;
+      const subtotal = activeItems.reduce((s, i) => s + i.total, 0);
+      const iva   = subtotal * ivaRate;
+      const total = subtotal + iva;
+      const bsFmt = (n) => tasaBcv ? 'Bs. ' + fmt(n * tasaBcv) : '—';
+      document.getElementById('t-subtotal').textContent    = '$ ' + fmt(subtotal);
+      document.getElementById('t-subtotal-bs').textContent = bsFmt(subtotal);
+      document.getElementById('t-iva-label').textContent   = `IVA (${Math.round(ivaRate * 100)}%)`;
+      document.getElementById('t-iva').textContent         = '$ ' + fmt(iva);
+      document.getElementById('t-iva-bs').textContent      = bsFmt(iva);
+      document.getElementById('t-total').textContent       = '$ ' + fmt(total);
+      document.getElementById('t-total-bs').textContent    = bsFmt(total);
     }
 
     function esc(s) {
@@ -384,6 +412,8 @@
       fd.append('pdf', selectedFile);
       fd.append('iva_rate', ivaRate.toString());
       fd.append('tasa_bcv', tasaBcv.toString());
+      fd.append('items_json', JSON.stringify(activeItems));
+      fd.append('header_json', JSON.stringify(currentData.header));
 
       try {
         const res = await fetch('/convert', { method: 'POST', body: fd });
