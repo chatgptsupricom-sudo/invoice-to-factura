@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Auditoría — Invoice to Factura</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #f0f4f8; color: #2d3748; }
+
+    .login-wrap {
+      display: flex; align-items: center; justify-content: center;
+      min-height: 100vh;
+    }
+    .login-card {
+      background: white; padding: 2.5rem 2rem; border-radius: 12px;
+      box-shadow: 0 4px 24px rgba(0,0,0,.1); width: 320px; text-align: center;
+    }
+    .login-card h1 { font-size: 1.4rem; margin-bottom: 1.5rem; }
+    .login-card input {
+      width: 100%; padding: .65rem .9rem; border: 1px solid #cbd5e0;
+      border-radius: 7px; font-size: 1rem; margin-bottom: 1rem;
+    }
+    .login-card button {
+      width: 100%; padding: .65rem; background: #2b6cb0; color: white;
+      border: none; border-radius: 7px; font-size: 1rem; cursor: pointer;
+    }
+    .login-card button:hover { background: #2c5282; }
+    .err { color: #e53e3e; font-size: .85rem; margin-top: .5rem; }
+
+    .dash { display: none; padding: 2rem; max-width: 1200px; margin: 0 auto; }
+    .dash header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 1.5rem;
+    }
+    .dash h1 { font-size: 1.5rem; }
+    .stats { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+    .stat-card {
+      background: white; padding: 1rem 1.5rem; border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.07); flex: 1; min-width: 160px;
+    }
+    .stat-card .val { font-size: 2rem; font-weight: 700; color: #2b6cb0; }
+    .stat-card .lbl { font-size: .8rem; color: #718096; margin-top: .25rem; }
+
+    .filters { display: flex; gap: .75rem; margin-bottom: 1rem; flex-wrap: wrap; }
+    .filters input {
+      padding: .45rem .75rem; border: 1px solid #cbd5e0; border-radius: 6px;
+      font-size: .9rem; flex: 1; min-width: 180px;
+    }
+    .btn-sm {
+      padding: .45rem .9rem; border: none; border-radius: 6px;
+      font-size: .85rem; cursor: pointer; background: #e2e8f0; color: #2d3748;
+    }
+    .btn-sm:hover { background: #cbd5e0; }
+    .btn-danger { background: #fed7d7; color: #c53030; }
+    .btn-danger:hover { background: #feb2b2; }
+
+    .table-wrap { overflow-x: auto; background: white; border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.07); }
+    table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+    th { background: #2d3748; color: white; padding: .65rem .9rem;
+      text-align: left; white-space: nowrap; }
+    td { padding: .6rem .9rem; border-bottom: 1px solid #edf2f7;
+      white-space: nowrap; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #f7fafc; }
+    .tag-del {
+      display: inline-block; background: #fed7d7; color: #c53030;
+      border-radius: 4px; padding: 1px 6px; font-size: .75rem; cursor: pointer;
+    }
+    .tag-del:hover { background: #feb2b2; }
+    .tag-ok { display: inline-block; background: #c6f6d5; color: #276749;
+      border-radius: 4px; padding: 1px 6px; font-size: .75rem; }
+
+    /* Modal */
+    .modal-bg {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5);
+      align-items: center; justify-content: center; z-index: 100;
+    }
+    .modal-bg.open { display: flex; }
+    .modal {
+      background: white; border-radius: 10px; padding: 1.5rem 1.75rem;
+      max-width: 520px; width: 90%; max-height: 80vh; overflow-y: auto;
+    }
+    .modal h3 { margin-bottom: .75rem; }
+    .modal ul { padding-left: 1.2rem; font-size: .85rem; }
+    .modal ul li { margin-bottom: .3rem; }
+    .modal .close-btn {
+      float: right; background: none; border: none; font-size: 1.3rem;
+      cursor: pointer; color: #718096;
+    }
+  </style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div class="login-wrap" id="login-wrap">
+  <div class="login-card">
+    <h1>🔐 Panel de Auditoría</h1>
+    <input type="password" id="pwd-input" placeholder="Contraseña de admin"
+      onkeydown="if(event.key==='Enter') doLogin()" />
+    <button onclick="doLogin()">Entrar</button>
+    <div class="err" id="login-err"></div>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div class="dash" id="dash">
+  <header>
+    <h1>📋 Auditoría de Uso</h1>
+    <button class="btn-sm btn-danger" onclick="logout()">Cerrar sesión</button>
+  </header>
+
+  <div class="stats">
+    <div class="stat-card"><div class="val" id="s-total">—</div><div class="lbl">Conversiones totales</div></div>
+    <div class="stat-card"><div class="val" id="s-del">—</div><div class="lbl">Con ítems eliminados</div></div>
+    <div class="stat-card"><div class="val" id="s-items">—</div><div class="lbl">Ítems eliminados en total</div></div>
+    <div class="stat-card"><div class="val" id="s-today">—</div><div class="lbl">Conversiones hoy</div></div>
+  </div>
+
+  <div class="filters">
+    <input id="f-search" type="text" placeholder="🔍 Buscar por IP, factura…" oninput="applyFilter()" />
+    <button class="btn-sm" onclick="loadLogs()">↻ Actualizar</button>
+    <button class="btn-sm" onclick="exportCsv()">⬇ Exportar CSV</button>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th><th>Fecha (UTC)</th><th>IP</th><th>Factura</th>
+          <th>Orig.</th><th>Final</th><th>Eliminados</th>
+          <th>IVA%</th><th>Tasa BCV</th><th>Total U$S</th><th>Total Bs.</th>
+        </tr>
+      </thead>
+      <tbody id="audit-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- MODAL items eliminados -->
+<div class="modal-bg" id="modal-bg" onclick="closeModal(event)">
+  <div class="modal">
+    <button class="close-btn" onclick="document.getElementById('modal-bg').classList.remove('open')">✕</button>
+    <h3>Ítems eliminados</h3>
+    <ul id="modal-list"></ul>
+  </div>
+</div>
+
+<script>
+  let adminKey = '';
+  let allLogs  = [];
+
+  function doLogin() {
+    const pwd = document.getElementById('pwd-input').value;
+    fetch('/admin/logs?key=' + encodeURIComponent(pwd))
+      .then(r => {
+        if (!r.ok) throw new Error('Contraseña incorrecta');
+        return r.json();
+      })
+      .then(data => {
+        adminKey = pwd;
+        allLogs  = data;
+        document.getElementById('login-wrap').style.display = 'none';
+        document.getElementById('dash').style.display = 'block';
+        renderStats(data);
+        renderTable(data);
+      })
+      .catch(e => {
+        document.getElementById('login-err').textContent = e.message;
+      });
+  }
+
+  function loadLogs() {
+    fetch('/admin/logs?key=' + encodeURIComponent(adminKey))
+      .then(r => r.json())
+      .then(data => { allLogs = data; applyFilter(); renderStats(data); });
+  }
+
+  function applyFilter() {
+    const q = document.getElementById('f-search').value.toLowerCase();
+    const filtered = q ? allLogs.filter(r =>
+      (r.ip || '').toLowerCase().includes(q) ||
+      (r.invoice_no || '').toLowerCase().includes(q)
+    ) : allLogs;
+    renderTable(filtered);
+  }
+
+  function renderStats(data) {
+    const today = new Date().toISOString().slice(0, 10);
+    document.getElementById('s-total').textContent  = data.length;
+    document.getElementById('s-del').textContent    = data.filter(r => r.deleted_qty > 0).length;
+    document.getElementById('s-items').textContent  = data.reduce((s, r) => s + (r.deleted_qty || 0), 0);
+    document.getElementById('s-today').textContent  = data.filter(r => r.ts && r.ts.startsWith(today)).length;
+  }
+
+  function fmt(n) {
+    if (n == null) return '—';
+    return Number(n).toLocaleString('es-VE', {minimumFractionDigits:2, maximumFractionDigits:2});
+  }
+
+  function renderTable(rows) {
+    const tbody = document.getElementById('audit-tbody');
+    tbody.innerHTML = '';
+    rows.forEach(r => {
+      const hasDel = r.deleted_qty > 0;
+      const delCell = hasDel
+        ? `<span class="tag-del" onclick='showDeleted(${JSON.stringify(r.deleted_items || "[]")}, ${r.deleted_qty})'>${r.deleted_qty} ver ▾</span>`
+        : `<span class="tag-ok">—</span>`;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${r.id}</td>
+        <td>${r.ts || '—'}</td>
+        <td>${r.ip || '—'}</td>
+        <td><b>${r.invoice_no || '—'}</b></td>
+        <td>${r.original_qty ?? '—'}</td>
+        <td>${r.final_qty ?? '—'}</td>
+        <td>${delCell}</td>
+        <td>${r.iva_rate != null ? Math.round(r.iva_rate*100)+'%' : '—'}</td>
+        <td>${r.tasa_bcv != null ? fmt(r.tasa_bcv) : '—'}</td>
+        <td>$ ${fmt(r.total_usd)}</td>
+        <td>Bs. ${fmt(r.total_bs)}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+    if (!rows.length) tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:#a0aec0;padding:2rem">Sin registros</td></tr>';
+  }
+
+  function showDeleted(raw, qty) {
+    let items = [];
+    try { items = typeof raw === 'string' ? JSON.parse(raw) : raw; } catch(e) {}
+    const list = document.getElementById('modal-list');
+    list.innerHTML = '';
+    if (items.length) {
+      items.forEach(it => {
+        const li = document.createElement('li');
+        li.textContent = `[${it.codigo}] ${it.descripcion} — Cant: ${it.cantidad}, Total: $${it.total}`;
+        list.appendChild(li);
+      });
+    } else {
+      list.innerHTML = `<li>${qty} ítems eliminados (sin detalle disponible)</li>`;
+    }
+    document.getElementById('modal-bg').classList.add('open');
+  }
+
+  function closeModal(e) {
+    if (e.target === document.getElementById('modal-bg'))
+      document.getElementById('modal-bg').classList.remove('open');
+  }
+
+  function exportCsv() {
+    const rows = allLogs;
+    const hdr = ['id','ts','ip','invoice_no','original_qty','final_qty','deleted_qty','iva_rate','tasa_bcv','total_usd','total_bs'];
+    const csv = [hdr.join(','), ...rows.map(r => hdr.map(k => JSON.stringify(r[k] ?? '')).join(','))].join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv'}));
+    a.download = 'auditoria_factura.csv';
+    a.click();
+  }
+
+  function logout() {
+    adminKey = '';
+    document.getElementById('login-wrap').style.display = '';
+    document.getElementById('dash').style.display = 'none';
+    document.getElementById('pwd-input').value = '';
+  }
+
+  document.getElementById('pwd-input').focus();
+</script>
+</body>
+</html>

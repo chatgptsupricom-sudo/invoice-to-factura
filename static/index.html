@@ -414,6 +414,11 @@
       fd.append('tasa_bcv', tasaBcv.toString());
       fd.append('items_json', JSON.stringify(activeItems));
       fd.append('header_json', JSON.stringify(currentData.header));
+      fd.append('original_qty', String(currentData.items.length));
+      const deletedItems = currentData.items.filter(orig =>
+        !activeItems.some(a => a.codigo === orig.codigo && a.descripcion === orig.descripcion)
+      );
+      fd.append('deleted_items_json', JSON.stringify(deletedItems));
 
       try {
         const res = await fetch('/convert', { method: 'POST', body: fd });
