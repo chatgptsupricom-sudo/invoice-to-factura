@@ -43,7 +43,8 @@ def _detect_format(full_text: str) -> str:
 
 
 def extract_invoice(pdf_bytes: bytes) -> dict:
-    header = {"invoice_no": "", "invoice_date": "", "due_date": "", "terms": ""}
+    header = {"invoice_no": "", "invoice_date": "", "due_date": "", "terms": "",
+              "client_name": "", "client_address": []}
     items = []
 
     with pdfplumber.open(BytesIO(pdf_bytes)) as pdf:
@@ -72,6 +73,28 @@ def _extract_classic(full_text, header, items):
     if m: header["due_date"] = m.group(1)
     m = re.search(r"Terms:\s*(.+)", full_text)
     if m: header["terms"] = m.group(1).strip()
+
+    # Client: after "Bill to" (may share line with "Ship to" in two-column PDFs)
+    # Each subsequent line may be "LEFT_VALUE RIGHT_VALUE" (duplicated columns)
+    m = re.search(r"Bill to.{0,20}Ship to\s*\n(.*?)(?=Invoice details|#\s+Product|\Z)",
+                  full_text, re.DOTALL)
+    if m:
+        raw_lines = [l.strip() for l in m.group(1).splitlines() if l.strip()]
+        client_lines = []
+        for l in raw_lines:
+            # If line is duplicated "A B A B" style, take the first half
+            half = len(l) // 2
+            first = l[:half].strip()
+            second = l[half:].strip()
+            # If first half repeated in second half → take first half only
+            if first and second.startswith(first[:min(8, len(first))]):
+                client_lines.append(first)
+            else:
+                # Otherwise take full line (non-duplicated address line)
+                client_lines.append(l)
+        if client_lines:
+            header["client_name"] = client_lines[0]
+            header["client_address"] = client_lines[1:]
 
     lines = full_text.splitlines()
     pending = None
@@ -127,6 +150,30 @@ def _extract_bracket(full_text, header, items):
     # Header fields
     m = re.search(r"Factura\s+(\d+)", full_text)
     if m: header["invoice_no"] = m.group(1)
+
+    # Client: in Format B, vendor occupies lines 1-N (ends with "Valencia Venezuela" or similar city+country),
+    # then client block starts (ends before "RFC:" or "Factura")
+    # Strategy: split first page text into two address blocks separated by a city/country line
+    first_page_lines = full_text.split("Factura")[0].splitlines()
+    # Find the vendor block end: line that has a city + country pattern or "Venezuela" alone
+    vendor_end = None
+    for i, l in enumerate(first_page_lines):
+        l = l.strip()
+        if re.match(r"^[A-Za-záéíóúÁÉÍÓÚ].*Venezuela$", l) or l == "Venezuela":
+            vendor_end = i
+            break
+    if vendor_end is not None:
+        # Client block starts after vendor's "city Venezuela" line
+        client_lines = [l.strip() for l in first_page_lines[vendor_end+1:] if l.strip()]
+        # Stop at another "Venezuela" line or "RFC:"
+        client_block = []
+        for l in client_lines:
+            if l.startswith("RFC:") or l == "Venezuela" or re.match(r"^[A-Za-záéíóúÁÉÍÓÚ].*Venezuela$", l):
+                break
+            client_block.append(l)
+        if client_block:
+            header["client_name"] = client_block[0]
+            header["client_address"] = client_block[1:]
     # Dates may be on same line or next line after the label
     m = re.search(r"Fecha de factura:\s*([\d/]+)", full_text)
     if m:

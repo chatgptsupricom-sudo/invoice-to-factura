@@ -150,7 +150,8 @@ def _cp_tab(cell, label, value, bold=False, size=6):
 
 # ── Header ───────────────────────────────────────────────────────────────────
 
-def _header_table(doc, invoice_no, invoice_date, due_date, terms):
+def _header_table(doc, invoice_no, invoice_date, due_date, terms,
+                  client_name="", client_address=None):
     table = doc.add_table(rows=1, cols=2)
     _remove_borders(table)
     tbl = table._tbl
@@ -166,10 +167,10 @@ def _header_table(doc, invoice_no, invoice_date, due_date, terms):
     _set_cell_width(right, 5400)
 
     left.text = ""
-    _cp(left, "Cliente: SUPRICOM CCS 21, C.A.", bold=True, size=9)
-    _cp(left, "CALLE LOS LABORATORIOS EDIF. OFINCA PISO PB LOCAL 2-A, LOS RUISES, CARACAS, MIRANDA", size=8)
-    _cp(left, "Distrito Capital DTC Distrito Capital", size=8)
-    _cp(left, "Venezuela — J501193738", size=8)
+    name = client_name or "Cliente"
+    _cp(left, f"Cliente: {name}", bold=True, size=9)
+    for addr_line in (client_address or []):
+        _cp(left, addr_line, size=8)
 
     right.text = ""
     _cp(right, f"Número de Factura: {invoice_no}", bold=True, size=9, align=WD_ALIGN_PARAGRAPH.RIGHT)
@@ -311,10 +312,12 @@ def generate_docx(invoice_data: dict, iva_rate: float = 0.16, tasa_bcv: float = 
 
     _header_table(
         doc,
-        invoice_no   = hdr.get("invoice_no", ""),
-        invoice_date = hdr.get("invoice_date", ""),
-        due_date     = hdr.get("due_date", ""),
-        terms        = hdr.get("terms", ""),
+        invoice_no      = hdr.get("invoice_no", ""),
+        invoice_date    = hdr.get("invoice_date", ""),
+        due_date        = hdr.get("due_date", ""),
+        terms           = hdr.get("terms", ""),
+        client_name     = hdr.get("client_name", ""),
+        client_address  = hdr.get("client_address", []),
     )
     _space(doc, 4)
     _divider(doc)
